@@ -50,6 +50,9 @@ def compute_param_stats(checkpoint_path: Path) -> dict:
     for name, param in state_dict.items():
         if not isinstance(param, torch.Tensor):
             continue
+        # 跳过 0 维标量（如 BatchNorm 的 num_batches_tracked）
+        if param.dim() == 0:
+            continue
         data = param.detach().cpu().float()
         grad = param.grad
         grad_data = grad.detach().cpu().float() if grad is not None else None
@@ -58,11 +61,11 @@ def compute_param_stats(checkpoint_path: Path) -> dict:
             "name": name,
             "shape": list(data.shape),
             "mean": float(data.mean().item()),
-            "std": float(data.std().item()),
+            "std": float(data.std().item()) if data.numel() > 1 else 0.0,
             "min": float(data.min().item()),
             "max": float(data.max().item()),
             "grad_mean": float(grad_data.mean().item()) if grad_data is not None else None,
-            "grad_std": float(grad_data.std().item()) if grad_data is not None else None,
+            "grad_std": float(grad_data.std().item()) if grad_data is not None and grad_data.numel() > 1 else None,
         }
         layers.append(item)
 

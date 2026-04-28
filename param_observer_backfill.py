@@ -19,7 +19,10 @@ def compute_checkpoint_stats(checkpoint_path: Path) -> dict:
     import torch
 
     ckpt = torch.load(checkpoint_path, map_location="cpu")
-    if "model_state_dict" in ckpt:
+    # 实际结构: ckpt['model'] 直接是 state_dict OrderedDict
+    if "model" in ckpt and isinstance(ckpt["model"], dict):
+        state_dict = ckpt["model"]
+    elif "model_state_dict" in ckpt:
         state_dict = ckpt["model_state_dict"]
     elif "state_dict" in ckpt:
         state_dict = ckpt["state_dict"]
@@ -30,12 +33,15 @@ def compute_checkpoint_stats(checkpoint_path: Path) -> dict:
     for name, param in state_dict.items():
         if not isinstance(param, torch.Tensor):
             continue
+        # 跳过 0 维标量（如 BatchNorm 的 num_batches_tracked）
+        if param.dim() == 0:
+            continue
         data = param.detach().cpu().float()
         layers.append({
             "name": name,
             "shape": list(data.shape),
             "mean": float(data.mean().item()),
-            "std": float(data.std().item()),
+            "std": float(data.std().item()) if data.numel() > 1 else 0.0,
             "min": float(data.min().item()),
             "max": float(data.max().item()),
         })
